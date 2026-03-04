@@ -16,7 +16,7 @@ cloudinary.config(
 
 DB_FILE = "dcard_backup.db"
 BOARD = "sex"
-LIKE_THRESHOLD = 10   # 降低門檻，讓更容易抓到文章
+LIKE_THRESHOLD = 10
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -53,20 +53,27 @@ def backup():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        page.goto(f"https://www.dcard.tw/f/{BOARD}", wait_until="networkidle")
+        
+        # 加強等待，讓動態內容完全載入
+        page.goto(f"https://www.dcard.tw/f/{BOARD}", wait_until="networkidle", timeout=60000)
+        page.wait_for_timeout(3000)  # 額外等待 3 秒讓文章載入
+        
         print(f"[DEBUG] 已進入看板: {BOARD}")
         
+        # 更穩定的 selector
         posts = page.evaluate('''() => {
             return Array.from(document.querySelectorAll('a[href*="/p/"]')).slice(0, 30).map(a => {
                 const m = a.href.match(/p\\/(\\d+)/);
                 return m ? {id: m[1]} : null;
             }).filter(Boolean);
         }''')
+        
         print(f"[DEBUG] 抓到 {len(posts)} 篇文章候選")
 
         for post in posts:
             post_id = post['id']
             page.goto(f"https://www.dcard.tw/f/{BOARD}/p/{post_id}", wait_until="networkidle")
+            page.wait_for_timeout(2000)
             
             data = page.evaluate('''() => ({
                 title: document.querySelector("h1")?.innerText || "無標題",
