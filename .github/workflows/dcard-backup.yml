@@ -19,12 +19,12 @@ jobs:
         with:
           python-version: '3.12'
       
-      - name: 安裝依賴
+      - name: 安裝依賴（已加入 requests）
         run: |
-          pip install playwright cloudinary beautifulsoup4
+          pip install playwright cloudinary beautifulsoup4 requests
           playwright install chromium
       
-      - name: 使用 ZenRows 執行備份
+      - name: 執行備份
         env:
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
