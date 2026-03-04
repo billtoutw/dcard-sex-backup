@@ -16,7 +16,7 @@ cloudinary.config(
 
 DB_FILE = "dcard_backup.db"
 BOARD = "sex"
-LIKE_THRESHOLD = 30
+LIKE_THRESHOLD = 10   # 降低門檻，讓更容易抓到文章
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -49,11 +49,12 @@ def upload_to_cloudinary(url):
             return None
 
 def backup():
-    print("🔄 開始抓取真實 Dcard 西斯板文章...")
+    print("🔄 [DEBUG] 開始抓取 Dcard 西斯板文章...")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         page.goto(f"https://www.dcard.tw/f/{BOARD}", wait_until="networkidle")
+        print(f"[DEBUG] 已進入看板: {BOARD}")
         
         posts = page.evaluate('''() => {
             return Array.from(document.querySelectorAll('a[href*="/p/"]')).slice(0, 30).map(a => {
@@ -61,6 +62,7 @@ def backup():
                 return m ? {id: m[1]} : null;
             }).filter(Boolean);
         }''')
+        print(f"[DEBUG] 抓到 {len(posts)} 篇文章候選")
 
         for post in posts:
             post_id = post['id']
@@ -82,7 +84,7 @@ def backup():
                         (post_id, title, content, 9999, json.dumps(media_urls), datetime.now().isoformat()))
             conn.commit()
             conn.close()
-            print(f"✅ 已備份真實文章：{title}")
+            print(f"✅ 已備份真實文章：{title} (ID: {post_id})")
 
         browser.close()
 
@@ -92,6 +94,7 @@ def generate_static_site():
     conn = sqlite3.connect(DB_FILE)
     rows = conn.execute("SELECT id, title, like_count, backup_time, image_urls FROM posts ORDER BY backup_time DESC").fetchall()
     conn.close()
+    print(f"[DEBUG] 資料庫共有 {len(rows)} 篇文章")
 
     html = """<!DOCTYPE html><html lang="zh-TW"><head><meta charset="utf-8"><title>Dcard 西斯板備份</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -99,7 +102,7 @@ def generate_static_site():
     <h1 style="text-align:center;color:#ff6b00;padding:20px;">Dcard 西斯板備份 - 最新文章</h1>"""
 
     if not rows:
-        html += "<p style='text-align:center;padding:40px;color:#666;'>目前還沒有抓到文章<br>請再手動跑一次 workflow</p>"
+        html += "<p style='text-align:center;padding:40px;color:#666;'>目前還沒有抓到文章<br>請再跑一次 workflow</p>"
     else:
         for row in rows:
             post_id, title, like, time_str, imgs = row
