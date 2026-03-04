@@ -5,9 +5,9 @@ on:
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
-# 給予完整寫入權限
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   backup:
@@ -32,10 +32,11 @@ jobs:
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
         run: python main.py
       
-      - name: Commit 並推送網頁檔案
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add index.html post_*.html
-          git commit -m "自動更新 Dcard 備份網頁" || echo "沒有新內容"
-          git push
+      - name: 自動產生更新 PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "自動更新 Dcard 備份網頁"
+          title: "自動更新：Dcard 西斯板備份"
+          body: "GitHub Actions 每 5 分鐘自動產生最新文章與媒體"
+          branch: update-dcard-backup
+          delete-branch: true
