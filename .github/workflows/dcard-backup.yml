@@ -2,20 +2,18 @@ name: Dcard 西斯板自動備份
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # 每 5 分鐘執行一次
-  workflow_dispatch:        # 可手動觸發
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
-# 關鍵修正：給予寫入權限
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: 設定 Python
         uses: actions/setup-python@v5
@@ -34,10 +32,11 @@ jobs:
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
         run: python main.py
       
-      - name: Commit 網頁檔案
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add index.html post_*.html
-          git commit -m "自動更新備份網頁" || echo "沒有新內容需要 commit"
-          git push
+      - name: 自動 Commit 網頁檔案
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "自動更新 Dcard 備份網頁"
+          title: "自動更新：Dcard 西斯板備份"
+          body: "GitHub Actions 自動產生最新文章列表與媒體"
+          branch: update-backup
+          delete-branch: true
