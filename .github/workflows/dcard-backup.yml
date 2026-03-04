@@ -1,0 +1,29 @@
+name: Dcard 西斯板自動備份
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # 每 5 分鐘執行一次
+  workflow_dispatch:        # 允許手動觸發
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: 設定 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: 安裝依賴
+        run: |
+          pip install playwright cloudinary beautifulsoup4
+          playwright install chromium
+      
+      - name: 執行備份
+        env:
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+        run: python main.py
