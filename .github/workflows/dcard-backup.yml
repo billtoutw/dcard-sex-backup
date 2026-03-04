@@ -2,8 +2,8 @@ name: Dcard 西斯板自動備份
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # 每 5 分鐘執行一次
-  workflow_dispatch:        # 允許手動觸發
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 jobs:
   backup:
@@ -27,3 +27,11 @@ jobs:
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
         run: python main.py
+      
+      - name: Commit 網頁檔案
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add index.html post_*.html
+          git commit -m "自動更新備份網頁" || echo "沒有新內容"
+          git push
