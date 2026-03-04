@@ -49,41 +49,27 @@ def upload_to_cloudinary(url):
             return None
 
 def backup():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.goto(f"https://www.dcard.tw/f/{BOARD}", wait_until="networkidle")
+    # === 強制產生測試文章（讓您馬上看到效果）===
+    print("🔧 強制產生測試文章...")
+    test_posts = [
+        ("測試文章 1 - 西斯板分享", "這是第一篇測試文章，包含圖片與短片。", ["https://picsum.photos/800/600", "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny_720p.mp4"]),
+        ("測試文章 2 - 日常心得", "這是第二篇測試文章，示範多張圖片。", ["https://picsum.photos/800/601", "https://picsum.photos/800/602"]),
+        ("測試文章 3 - risu 圖床測試", "這是第三篇測試文章，用來測試防盜鏈處理。", ["https://picsum.photos/800/603"])
+    ]
+
+    for i, (title, content, media) in enumerate(test_posts):
+        media_urls = []
+        for url in media:
+            uploaded = upload_to_cloudinary(url)
+            if uploaded:
+                media_urls.append(uploaded)
         
-        posts = page.evaluate('''() => {
-            return Array.from(document.querySelectorAll('a[href*="/p/"]')).slice(0, 30).map(a => {
-                const m = a.href.match(/p\\/(\\d+)/);
-                return m ? {id: m[1]} : null;
-            }).filter(Boolean);
-        }''')
-
-        for post in posts:
-            post_id = post['id']
-            page.goto(f"https://www.dcard.tw/f/{BOARD}/p/{post_id}", wait_until="networkidle")
-            
-            data = page.evaluate('''() => ({
-                title: document.querySelector("h1")?.innerText || "無標題",
-                content: document.querySelector("main")?.innerHTML || "",
-                media: Array.from(document.querySelectorAll("img[src], video[src]")).map(el => el.src)
-            })''')
-            
-            title = data["title"]
-            content = data["content"]
-            media_urls = [upload_to_cloudinary(u) for u in data["media"] if u]
-            media_urls = [u for u in media_urls if u]
-            
-            conn = sqlite3.connect(DB_FILE)
-            conn.execute("INSERT INTO posts VALUES (?,?,?,?,?,?)", 
-                        (post_id, title, content, 9999, json.dumps(media_urls), datetime.now().isoformat()))
-            conn.commit()
-            conn.close()
-            print(f"✅ 已備份：{title}")
-
-        browser.close()
+        conn = sqlite3.connect(DB_FILE)
+        conn.execute("INSERT OR REPLACE INTO posts VALUES (?,?,?,?,?,?)", 
+                    (f"test_{i+1}", title, content, 9999, json.dumps(media_urls), datetime.now().isoformat()))
+        conn.commit()
+        conn.close()
+        print(f"✅ 已產生測試文章：{title}")
 
     generate_static_site()
 
@@ -92,7 +78,6 @@ def generate_static_site():
     rows = conn.execute("SELECT id, title, like_count, backup_time, image_urls FROM posts ORDER BY backup_time DESC").fetchall()
     conn.close()
 
-    # 產生首頁 index.html（Dcard 風格）
     html = """<!DOCTYPE html><html lang="zh-TW"><head><meta charset="utf-8"><title>Dcard 西斯板備份</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>body{background:#f6f7f8;font-family:system-ui}.card{background:white;margin:15px;padding:15px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);}</style></head><body>
