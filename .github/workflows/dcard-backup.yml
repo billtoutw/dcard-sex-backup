@@ -1,4 +1,4 @@
-name: Dcard 西斯板自動備份
+name: Dcard 西斯板自動備份 (ZenRows 版)
 
 on:
   schedule:
@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   backup:
@@ -25,18 +24,10 @@ jobs:
           pip install playwright cloudinary beautifulsoup4
           playwright install chromium
       
-      - name: 執行備份
+      - name: 使用 ZenRows 執行備份
         env:
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          ZENROWS_API_KEY: ${{ secrets.ZENROWS_API_KEY }}
         run: python main.py
-      
-      - name: 自動產生更新 PR
-        uses: peter-evans/create-pull-request@v7
-        with:
-          commit-message: "自動更新 Dcard 備份網頁"
-          title: "自動更新：Dcard 西斯板備份"
-          body: "GitHub Actions 每 5 分鐘自動產生最新文章與媒體"
-          branch: update-dcard-backup
-          delete-branch: true
