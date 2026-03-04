@@ -7,6 +7,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from io import BytesIO
+import time
 
 cloudinary.config(
     cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
@@ -18,18 +19,27 @@ ZENROWS_API_KEY = os.getenv("ZENROWS_API_KEY")
 
 DB_FILE = "dcard_backup.db"
 BOARD = "sex"
-LIKE_THRESHOLD = 10
+LIKE_THRESHOLD = 30
 
-def zenrows_get(url):
+def zenrows_get(url, retries=2):
+    """使用 ZenRows 抓取，加入重試機制"""
     payload = {
         "url": url,
         "apikey": ZENROWS_API_KEY,
         "js_render": "true",
-        "antibot": "true",
-        "premium_proxy": "true"
+        "antibot": "true"
     }
-    r = requests.get("https://api.zenrows.com/v1/", params=payload, timeout=40)
-    return r.text
+    for attempt in range(retries + 1):
+        try:
+            r = requests.get("https://api.zenrows.com/v1/", params=payload, timeout=60)
+            r.raise_for_status()
+            return r.text
+        except Exception as e:
+            print(f"ZenRows 嘗試 {attempt+1} 失敗: {e}")
+            if attempt == retries:
+                raise
+            time.sleep(5)
+    return ""
 
 def normalize_url(url):
     if not url: return None
@@ -45,7 +55,8 @@ def upload_to_cloudinary(url):
         return cloudinary.uploader.upload(url, headers=headers, resource_type="auto", timeout=30)["secure_url"]
     except:
         try:
-            r = requests.get(url, headers=headers, timeout=20)
+            import requests as req
+            r = req.get(url, headers=headers, timeout=20)
             r.raise_for_status()
             file_obj = BytesIO(r.content)
             file_obj.name = "media.bin"
@@ -56,6 +67,10 @@ def upload_to_cloudinary(url):
 def backup():
     print("🔄 使用 ZenRows 抓取西斯板文章...")
     html = zenrows_get(f"https://www.dcard.tw/f/{BOARD}")
+    if not html:
+        print("ZenRows 抓取失敗")
+        return
+    
     soup = BeautifulSoup(html, "html.parser")
     
     links = soup.select('a[href*="/p/"]')
@@ -76,6 +91,8 @@ def backup():
         if exists: continue
         
         article_html = zenrows_get(f"https://www.dcard.tw/f/{BOARD}/p/{post_id}")
+        if not article_html: continue
+        
         article_soup = BeautifulSoup(article_html, "html.parser")
         
         title = article_soup.find("h1")
@@ -103,7 +120,6 @@ def generate_static_site():
     conn = sqlite3.connect(DB_FILE)
     rows = conn.execute("SELECT id, title, like_count, backup_time, image_urls FROM posts ORDER BY backup_time DESC").fetchall()
     conn.close()
-    print(f"[DEBUG] 資料庫共有 {len(rows)} 篇文章")
 
     html = """<!DOCTYPE html><html lang="zh-TW"><head><meta charset="utf-8"><title>Dcard 西斯板備份</title>
     <script src="https://cdn.tailwindcss.com"></script>
