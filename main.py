@@ -49,6 +49,7 @@ def upload_to_cloudinary(url):
             return None
 
 def backup():
+    print("🔄 開始抓取真實 Dcard 西斯板文章...")
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
@@ -81,7 +82,7 @@ def backup():
                         (post_id, title, content, 9999, json.dumps(media_urls), datetime.now().isoformat()))
             conn.commit()
             conn.close()
-            print(f"✅ 已備份：{title}")
+            print(f"✅ 已備份真實文章：{title}")
 
         browser.close()
 
@@ -97,16 +98,19 @@ def generate_static_site():
     <style>body{background:#f6f7f8;font-family:system-ui}.card{background:white;margin:15px;padding:15px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);}</style></head><body>
     <h1 style="text-align:center;color:#ff6b00;padding:20px;">Dcard 西斯板備份 - 最新文章</h1>"""
 
-    for row in rows:
-        post_id, title, like, time_str, imgs = row
-        media = json.loads(imgs) if imgs else []
-        thumb = media[0] if media else ""
-        html += f'''
-        <div class="card">
-            <h2><a href="post_{post_id}.html">{title}</a></h2>
-            <p>❤️ {like} | {time_str}</p>
-            {f'<img src="{thumb}" style="max-width:220px;border-radius:8px;">' if thumb else ''}
-        </div>'''
+    if not rows:
+        html += "<p style='text-align:center;padding:40px;color:#666;'>目前還沒有抓到文章，請再跑一次 workflow</p>"
+    else:
+        for row in rows:
+            post_id, title, like, time_str, imgs = row
+            media = json.loads(imgs) if imgs else []
+            thumb = media[0] if media else ""
+            html += f'''
+            <div class="card">
+                <h2><a href="post_{post_id}.html">{title}</a></h2>
+                <p>❤️ {like} | {time_str}</p>
+                {f'<img src="{thumb}" style="max-width:220px;border-radius:8px;">' if thumb else ''}
+            </div>'''
     
     html += "</body></html>"
     with open("index.html", "w", encoding="utf-8") as f:
