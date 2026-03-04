@@ -18,10 +18,9 @@ ZENROWS_API_KEY = os.getenv("ZENROWS_API_KEY")
 
 DB_FILE = "dcard_backup.db"
 BOARD = "sex"
-LIKE_THRESHOLD = 30
+LIKE_THRESHOLD = 10
 
 def zenrows_get(url):
-    """使用 ZenRows 繞過 Cloudflare"""
     payload = {
         "url": url,
         "apikey": ZENROWS_API_KEY,
@@ -46,8 +45,7 @@ def upload_to_cloudinary(url):
         return cloudinary.uploader.upload(url, headers=headers, resource_type="auto", timeout=30)["secure_url"]
     except:
         try:
-            import requests as req
-            r = req.get(url, headers=headers, timeout=20)
+            r = requests.get(url, headers=headers, timeout=20)
             r.raise_for_status()
             file_obj = BytesIO(r.content)
             file_obj.name = "media.bin"
@@ -69,6 +67,8 @@ def backup():
             if post_id.isdigit() and post_id not in post_ids:
                 post_ids.append(post_id)
     
+    print(f"[DEBUG] 抓到 {len(post_ids)} 篇文章候選")
+
     for post_id in post_ids:
         conn = sqlite3.connect(DB_FILE)
         exists = conn.execute("SELECT id FROM posts WHERE id=?", (post_id,)).fetchone()
@@ -103,6 +103,7 @@ def generate_static_site():
     conn = sqlite3.connect(DB_FILE)
     rows = conn.execute("SELECT id, title, like_count, backup_time, image_urls FROM posts ORDER BY backup_time DESC").fetchall()
     conn.close()
+    print(f"[DEBUG] 資料庫共有 {len(rows)} 篇文章")
 
     html = """<!DOCTYPE html><html lang="zh-TW"><head><meta charset="utf-8"><title>Dcard 西斯板備份</title>
     <script src="https://cdn.tailwindcss.com"></script>
