@@ -34,42 +34,33 @@ def normalize_url(url):
 def upload_to_cloudinary(url):
     url = normalize_url(url)
     if not url: return None
-    
     headers = {"Referer": "https://www.dcard.tw/"}
-    
-    # 第一種方式：直接上傳（最快）
     try:
         return cloudinary.uploader.upload(url, headers=headers, resource_type="auto", timeout=30)["secure_url"]
     except:
-        pass
-    
-    # 第二種方式：先下載再上傳（針對 risu、myppt、lurl 等防盜鏈）
-    try:
-        import requests
-        r = requests.get(url, headers=headers, timeout=20)
-        r.raise_for_status()
-        file_obj = BytesIO(r.content)
-        file_obj.name = "media.bin"
-        return cloudinary.uploader.upload(file_obj, resource_type="auto", timeout=30)["secure_url"]
-    except Exception as e:
-        print(f"上傳失敗 {url[:80]}... : {e}")
-        return None
+        try:
+            import requests
+            r = requests.get(url, headers=headers, timeout=20)
+            r.raise_for_status()
+            file_obj = BytesIO(r.content)
+            file_obj.name = "media.bin"
+            return cloudinary.uploader.upload(file_obj, resource_type="auto", timeout=30)["secure_url"]
+        except:
+            return None
 
 def backup():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        
         page.goto(f"https://www.dcard.tw/f/{BOARD}", wait_until="networkidle")
         
-        # 抓取最新 30 篇
         posts = page.evaluate('''() => {
             return Array.from(document.querySelectorAll('a[href*="/p/"]')).slice(0, 30).map(a => {
                 const m = a.href.match(/p\\/(\\d+)/);
                 return m ? {id: m[1]} : null;
             }).filter(Boolean);
         }''')
-        
+
         for post in posts:
             post_id = post['id']
             page.goto(f"https://www.dcard.tw/f/{BOARD}/p/{post_id}", wait_until="networkidle")
@@ -77,27 +68,53 @@ def backup():
             data = page.evaluate('''() => ({
                 title: document.querySelector("h1")?.innerText || "無標題",
                 content: document.querySelector("main")?.innerHTML || "",
-                media: Array.from(document.querySelectorAll("img[src], video[src], video source[src]")).map(el => el.src)
+                media: Array.from(document.querySelectorAll("img[src], video[src]")).map(el => el.src)
             })''')
             
             title = data["title"]
             content = data["content"]
-            media_urls = []
-            
-            for url in data["media"]:
-                if url:
-                    uploaded = upload_to_cloudinary(url)
-                    if uploaded:
-                        media_urls.append(uploaded)
+            media_urls = [upload_to_cloudinary(url) for url in data["media"] if url]
+            media_urls = [u for u in media_urls if u]
             
             conn = sqlite3.connect(DB_FILE)
             conn.execute("INSERT INTO posts VALUES (?,?,?,?,?,?)", 
                         (post_id, title, content, 9999, json.dumps(media_urls), datetime.now().isoformat()))
             conn.commit()
             conn.close()
-            print(f"✅ 已備份：{title}（含 {len(media_urls)} 個媒體）")
-        
+            print(f"✅ 已備份：{title}")
+
         browser.close()
+
+    # === 自動產生靜態網頁 ===
+    generate_static_site()
+
+def generate_static_site():
+    conn = sqlite3.connect(DB_FILE)
+    rows = conn.execute("SELECT id, title, like_count, backup_time, image_urls FROM posts ORDER BY backup_time DESC").fetchall()
+    conn.close()
+
+    # 產生首頁 index.html
+    html = """<!DOCTYPE html><html lang="zh-TW"><head><meta charset="utf-8"><title>Dcard 西斯板備份</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>body{background:#f6f7f8;font-family:system-ui}.card{background:white;margin:15px;padding:15px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);}</style></head><body>
+    <h1 style="text-align:center;color:#ff6b00;padding:20px;">Dcard 西斯板備份 - 最新文章</h1>"""
+
+    for row in rows:
+        post_id, title, like, time_str, imgs = row
+        media = json.loads(imgs) if imgs else []
+        thumb = media[0] if media else ""
+        html += f'''
+        <div class="card">
+            <h2><a href="post_{post_id}.html">{title}</a></h2>
+            <p>❤️ {like} | {time_str}</p>
+            {f'<img src="{thumb}" style="max-width:200px;">' if thumb else ''}
+        </div>'''
+    
+    html += "</body></html>"
+    with open("index.html", "w", encoding="utf-8") as f:
+        f.write(html)
+
+    print("📄 已產生 index.html")
 
 if __name__ == "__main__":
     backup()
