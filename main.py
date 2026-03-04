@@ -49,24 +49,42 @@ def upload_to_cloudinary(url):
             return None
 
 def backup():
-    print("🔄 開始備份（先產生測試文章讓您看到效果）")
-    # 強制產生測試文章
-    test_posts = [
-        ("測試文章 1 - 西斯板分享", "這是第一篇測試文章，用來確認版型正常。", ["https://picsum.photos/620/400"]),
-        ("測試文章 2 - 短片測試", "這是第二篇測試文章，包含短片。", ["https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny_720p.mp4"]),
-        ("測試文章 3 - risu 圖床測試", "這是第三篇測試文章，用來測試防盜鏈處理。", ["https://picsum.photos/620/401"])
-    ]
-
-    for i, (title, content, media) in enumerate(test_posts):
-        media_urls = [upload_to_cloudinary(u) for u in media]
-        media_urls = [u for u in media_urls if u]
+    print("🔄 開始抓取真實 Dcard 西斯板文章...")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.goto(f"https://www.dcard.tw/f/{BOARD}", wait_until="networkidle")
         
-        conn = sqlite3.connect(DB_FILE)
-        conn.execute("INSERT OR REPLACE INTO posts VALUES (?,?,?,?,?,?)", 
-                    (f"test_{i+1}", title, content, 9999, json.dumps(media_urls), datetime.now().isoformat()))
-        conn.commit()
-        conn.close()
-        print(f"✅ 已產生測試文章：{title}")
+        posts = page.evaluate('''() => {
+            return Array.from(document.querySelectorAll('a[href*="/p/"]')).slice(0, 30).map(a => {
+                const m = a.href.match(/p\\/(\\d+)/);
+                return m ? {id: m[1]} : null;
+            }).filter(Boolean);
+        }''')
+
+        for post in posts:
+            post_id = post['id']
+            page.goto(f"https://www.dcard.tw/f/{BOARD}/p/{post_id}", wait_until="networkidle")
+            
+            data = page.evaluate('''() => ({
+                title: document.querySelector("h1")?.innerText || "無標題",
+                content: document.querySelector("main")?.innerHTML || "",
+                media: Array.from(document.querySelectorAll("img[src], video[src]")).map(el => el.src)
+            })''')
+            
+            title = data["title"]
+            content = data["content"]
+            media_urls = [upload_to_cloudinary(u) for u in data["media"] if u]
+            media_urls = [u for u in media_urls if u]
+            
+            conn = sqlite3.connect(DB_FILE)
+            conn.execute("INSERT OR REPLACE INTO posts VALUES (?,?,?,?,?,?)", 
+                        (post_id, title, content, 9999, json.dumps(media_urls), datetime.now().isoformat()))
+            conn.commit()
+            conn.close()
+            print(f"✅ 已備份真實文章：{title}")
+
+        browser.close()
 
     generate_static_site()
 
@@ -80,16 +98,19 @@ def generate_static_site():
     <style>body{background:#f6f7f8;font-family:system-ui}.card{background:white;margin:15px;padding:15px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);}</style></head><body>
     <h1 style="text-align:center;color:#ff6b00;padding:20px;">Dcard 西斯板備份 - 最新文章</h1>"""
 
-    for row in rows:
-        post_id, title, like, time_str, imgs = row
-        media = json.loads(imgs) if imgs else []
-        thumb = media[0] if media else ""
-        html += f'''
-        <div class="card">
-            <h2><a href="post_{post_id}.html">{title}</a></h2>
-            <p>❤️ {like} | {time_str}</p>
-            {f'<img src="{thumb}" style="max-width:220px;border-radius:8px;">' if thumb else ''}
-        </div>'''
+    if not rows:
+        html += "<p style='text-align:center;padding:40px;color:#666;'>目前還沒有抓到文章<br>請再手動跑一次 workflow</p>"
+    else:
+        for row in rows:
+            post_id, title, like, time_str, imgs = row
+            media = json.loads(imgs) if imgs else []
+            thumb = media[0] if media else ""
+            html += f'''
+            <div class="card">
+                <h2><a href="post_{post_id}.html">{title}</a></h2>
+                <p>❤️ {like} | {time_str}</p>
+                {f'<img src="{thumb}" style="max-width:220px;border-radius:8px;">' if thumb else ''}
+            </div>'''
     
     html += "</body></html>"
     with open("index.html", "w", encoding="utf-8") as f:
