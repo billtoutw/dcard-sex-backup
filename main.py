@@ -45,8 +45,7 @@ def upload_to_cloudinary(url):
             file_obj = BytesIO(r.content)
             file_obj.name = "media.bin"
             return cloudinary.uploader.upload(file_obj, resource_type="auto", timeout=30)["secure_url"]
-        except Exception as e:
-            print(f"上傳失敗 {url[:80]}... : {e}")
+        except:
             return None
 
 def backup():
@@ -82,8 +81,8 @@ def backup():
                         (post_id, title, content, 9999, json.dumps(media_urls), datetime.now().isoformat()))
             conn.commit()
             conn.close()
-            print(f"✅ 已備份：{title}（含 {len(media_urls)} 個媒體）")
-        
+            print(f"✅ 已備份：{title}")
+
         browser.close()
 
     generate_static_site()
@@ -93,6 +92,7 @@ def generate_static_site():
     rows = conn.execute("SELECT id, title, like_count, backup_time, image_urls FROM posts ORDER BY backup_time DESC").fetchall()
     conn.close()
 
+    # 產生首頁 index.html（Dcard 風格）
     html = """<!DOCTYPE html><html lang="zh-TW"><head><meta charset="utf-8"><title>Dcard 西斯板備份</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>body{background:#f6f7f8;font-family:system-ui}.card{background:white;margin:15px;padding:15px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);}</style></head><body>
@@ -106,13 +106,12 @@ def generate_static_site():
         <div class="card">
             <h2><a href="post_{post_id}.html">{title}</a></h2>
             <p>❤️ {like} | {time_str}</p>
-            {f'<img src="{thumb}" style="max-width:200px;">' if thumb else ''}
+            {f'<img src="{thumb}" style="max-width:220px;border-radius:8px;">' if thumb else ''}
         </div>'''
     
     html += "</body></html>"
     with open("index.html", "w", encoding="utf-8") as f:
         f.write(html)
-
     print("📄 已產生 index.html")
 
 if __name__ == "__main__":
