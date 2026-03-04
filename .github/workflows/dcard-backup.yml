@@ -2,14 +2,20 @@ name: Dcard 西斯板自動備份
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
-  workflow_dispatch:
+    - cron: '*/5 * * * *'   # 每 5 分鐘執行一次
+  workflow_dispatch:        # 可手動觸發
+
+# 關鍵修正：給予寫入權限
+permissions:
+  contents: write
 
 jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
       
       - name: 設定 Python
         uses: actions/setup-python@v5
@@ -33,5 +39,5 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add index.html post_*.html
-          git commit -m "自動更新備份網頁" || echo "沒有新內容"
+          git commit -m "自動更新備份網頁" || echo "沒有新內容需要 commit"
           git push
